@@ -8,8 +8,9 @@ export type BarrelCache = Map<string, Map<string, Target> | undefined>;
 type Target = { file: string; name: string };
 
 const SCRIPT = /(<script\b[^>]*>)([\s\S]*?)(<\/script>)/g;
-const NAMED_IMPORT =
-  /^([ \t]*)import\s*\{([^}]*)\}\s*from\s*(["'])([^"']+)\3;?/gm;
+// `import { a, b as c } from "lib"`, or `import A from "lib"`.
+const IMPORT =
+  /^([ \t]*)import\s+(?:\{([^}]*)\}|([A-Za-z_$][\w$]*))\s*from\s*(["'])([^"']+)\4;?/gm;
 const REEXPORT = /^export\s*\{([^}]*)\}\s*from\s*(["'])(\.{1,2}\/[^"']+)\2$/;
 const COMMENT = /\/\*[\s\S]*?\*\/|\/\/[^\n]*/g;
 const BARE = /^[@a-z]/;
@@ -30,7 +31,8 @@ function readBarrel(file: string): Map<string, Target> | undefined {
   if (!existsSync(file)) return undefined;
   const statements = readFileSync(file, "utf8")
     .replace(COMMENT, "")
-    .split(/;|\n/)
+    // A statement may span lines: `export {\n  a,\n} from "./a.js"`.
+    .split(/;|\n(?=\s*(?:export|import)\b)/)
     .map((statement) => statement.trim())
     .filter(Boolean);
   const targets = new Map<string, Target>();
@@ -49,10 +51,9 @@ function readBarrel(file: string): Map<string, Target> | undefined {
 function rewriteImport(
   statement: string,
   indent: string,
-  list: string,
+  imports: { name: string; local: string }[],
   barrel: Map<string, Target>,
 ): string {
-  const imports = specifiers(list);
   if (imports.some(({ name }) => name.startsWith("type "))) return statement;
   const lines = [];
   for (const { name, local } of imports) {
@@ -81,11 +82,12 @@ export function rewriteBarrelImports(
     SCRIPT,
     (_block, open: string, code: string, close: string) => {
       const rewritten = code.replace(
-        NAMED_IMPORT,
+        IMPORT,
         (
           statement,
           indent: string,
-          list: string,
+          list: string | undefined,
+          defaultName: string | undefined,
           _quote,
           specifier: string,
         ) => {
@@ -96,8 +98,11 @@ export function rewriteBarrelImports(
           }
           if (!cache.has(entry)) cache.set(entry, readBarrel(entry));
           const barrel = cache.get(entry);
+          const imports = defaultName
+            ? [{ name: "default", local: defaultName }]
+            : specifiers(list ?? "");
           return barrel
-            ? rewriteImport(statement, indent, list, barrel)
+            ? rewriteImport(statement, indent, imports, barrel)
             : statement;
         },
       );
