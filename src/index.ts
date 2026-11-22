@@ -3,6 +3,7 @@ import { basename, dirname, join, resolve } from "node:path";
 
 import type { BunPlugin, OnLoadArgs } from "bun";
 
+import { type BarrelCache, rewriteBarrelImports } from "./barrel.ts";
 import { compileFile, type Side, type SvelteCompiler } from "./component.ts";
 import { productionByEnv, warn, workingDirectory } from "./env.ts";
 import { SvelteBunError } from "./errors.ts";
@@ -200,6 +201,7 @@ export function svelte(options: SvelteBunOptions = {}): BunPlugin {
   const onwarn = options.onwarn ?? printWarning;
   const stylesheets = new Map<string, { css: string; from: string }>();
   const exportsCache: ExportsCache = new Map();
+  const barrelCache: BarrelCache = new Map();
   // Read on first use, not when the module loads: importing `svelte` from
   // svelte-bun creates the default export too.
   let setup: Setup | undefined;
@@ -223,9 +225,38 @@ export function svelte(options: SvelteBunOptions = {}): BunPlugin {
     return setup;
   };
 
+  const resolveEntry = (specifier: string, importer: string) => {
+    const viaCondition = resolveCondition(
+      specifier,
+      importer,
+      ready().conditions,
+      exportsCache,
+    );
+    if (viaCondition !== undefined) return viaCondition;
+    try {
+      return Bun.resolveSync(specifier, dirname(importer));
+    } catch {
+      return undefined;
+    }
+  };
+
   return {
     name: "svelte-bun",
     setup(build) {
+      // compat: Bun runs a build's macros, and leaves
+      // process.env.NODE_ENV in its output, as development unless the
+      // build defines it. Bun.plugin() at runtime has no config, though
+      // the type says it does.
+      const config: { define?: Record<string, string> } | undefined =
+        build.config;
+      const define = config?.define ?? {};
+      if (config && production && !("process.env.NODE_ENV" in define)) {
+        config.define = {
+          ...define,
+          "process.env.NODE_ENV": JSON.stringify("production"),
+        };
+      }
+
       build.onResolve({ filter: BARE }, (args) => {
         const path = resolveCondition(
           args.path,
@@ -250,6 +281,14 @@ export function svelte(options: SvelteBunOptions = {}): BunPlugin {
             source = (
               await compiler.preprocess(source, preprocess, { filename })
             ).code;
+          }
+          if (args.path.endsWith(".svelte")) {
+            source = rewriteBarrelImports(
+              source,
+              args.path,
+              resolveEntry,
+              barrelCache,
+            );
           }
           out = compileFile(compiler, source, {
             filename: args.path,
