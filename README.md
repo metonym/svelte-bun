@@ -16,6 +16,7 @@ and Svelte's message.
 | a library's `svelte` export condition | `Could not resolve: "fake-lib"` | ✓ |
 | `@import "./card.css"` in a component in a subdirectory | `Could not resolve: "./card.css"` | ✓ |
 | preprocessors and `svelte.config.js` | ✗ | ✓ |
+| a custom renderer, in `bun run` and `bun test` | ✗ can't pass `experimental.customRenderer` | ✓ |
 | a minimal app, `minify: true`, production | 21.2 kB gzip | 18.7 kB gzip |
 
 ## Quick start
@@ -46,6 +47,14 @@ export default {
   preprocess: [optimizeImports()],
   compilerOptions: { runes: true },
 };
+```
+
+In `bun run` and `bun test`, a preload compiles the `.svelte` files
+Bun's runtime imports, with the same config:
+
+```toml
+# bunfig.toml
+preload = ["svelte-bun/register"]
 ```
 
 ## From code
@@ -79,7 +88,7 @@ instead.
 ## Docs
 
 - [Options](https://github.com/metonym/svelte-bun/blob/master/docs/options.md):
-  every option, `svelte.config.js`, and the `load` hook
+  every option, `svelte.config.js`, custom renderers, and the preload
 - [Compile API](https://github.com/metonym/svelte-bun/blob/master/docs/compile.md):
   `compileFile()` and `scanImports()`, for another host
 - [Compared](https://github.com/metonym/svelte-bun/blob/master/docs/compared.md):

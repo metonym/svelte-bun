@@ -22,7 +22,8 @@ const parts = scanImports(source, "src/App.svelte");
 ## `compileFile`
 
 `compileFile(compiler, source, options)` compiles one file
-and returns `{ js, css }`.
+and returns `{ js, css, warnings }`,
+each warning as `file:line:column message`.
 A `.svelte` file compiles as a component;
 a `.svelte.ts` or `.svelte.js` file compiles as a rune module,
 with its TypeScript stripped first.

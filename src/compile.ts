@@ -6,6 +6,7 @@ export type {
   CompileFileOptions,
   Side,
   SvelteCompiler,
+  SvelteWarning,
 } from "./component.ts";
 export { compileFile } from "./component.ts";
 export type { SvelteBunErrorCode, SvelteBunErrorKind } from "./errors.ts";

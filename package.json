@@ -20,6 +20,9 @@
       "types": "./compile.d.ts",
       "default": "./src/compile.ts"
     },
+    "./register": {
+      "default": "./src/register.ts"
+    },
     "./package.json": "./package.json"
   },
   "peerDependencies": {

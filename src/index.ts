@@ -1,11 +1,10 @@
 import { existsSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { basename, dirname, join, resolve } from "node:path";
 
 import type { BunPlugin, OnLoadArgs } from "bun";
 
 import { compileFile, type Side, type SvelteCompiler } from "./component.ts";
-import { productionByEnv, workingDirectory } from "./env.ts";
+import { productionByEnv, warn, workingDirectory } from "./env.ts";
 import { SvelteBunError } from "./errors.ts";
 import { inlineEsmEnv } from "./esm-env.ts";
 import { type ExportsCache, resolveCondition } from "./resolve.ts";
@@ -38,6 +37,17 @@ export type SvelteBunOptions = {
    */
   css?: "external" | "injected";
   /**
+   * Export conditions to resolve packages through, the first match
+   * winning. `svelte-custom-renderer` comes first when `compilerOptions`
+   * sets `experimental.customRenderer`. The default is `["svelte"]`.
+   */
+  conditions?: readonly string[];
+  /**
+   * Called with each Svelte warning, as `file:line:column message`. The
+   * default prints it, except for files under `node_modules`.
+   */
+  onwarn?: (warning: string, path: string) => void;
+  /**
    * The source to compile in place of a `.svelte` file's own, or
    * `undefined` for its own, before preprocessing: for a source rewriter
    * such as carbon-preprocess-svelte's `optimizeCarbonBun()`.
@@ -54,6 +64,8 @@ type Setup = {
   compiler: SvelteCompiler;
   preprocess: unknown;
   compilerOptions: Readonly<Record<string, unknown>> | undefined;
+  renderer: string | undefined;
+  conditions: readonly string[];
 };
 
 const SVELTE = /\.svelte(\.[jt]s)?$/;
@@ -61,6 +73,8 @@ const SVELTE_CSS = /\.svelte\.css$/;
 const BARE = /^[@a-z]/;
 const SVELTE_RUNTIME = /[\\/]node_modules[\\/]svelte[\\/]src[\\/].+\.js$/;
 const LIVE_GLOBAL = /\$\.(document|window)\b/g;
+const NODE_MODULES = /[\\/]node_modules[\\/]/;
+const RELATIVE = /^\.\.?([\\/]|$)/;
 const CONFIG_FILES = [
   "svelte.config.js",
   "svelte.config.mjs",
@@ -89,14 +103,15 @@ function parseConfig(module: unknown, file: string): Config {
   return parsed;
 }
 
-async function loadConfig(root: string): Promise<Config> {
+// Synchronous, since onResolve is: Bun's require loads ESM too.
+function loadConfig(root: string): Config {
   const file = CONFIG_FILES.map((name) => join(root, name)).find((path) =>
     existsSync(path),
   );
   if (!file) return {};
   let module: unknown;
   try {
-    module = await import(pathToFileURL(file).href);
+    module = import.meta.require(file);
   } catch (cause) {
     throw new SvelteBunError(
       "SB_CONFIG_UNREADABLE",
@@ -120,10 +135,10 @@ function isCompiler(module: unknown): module is SvelteCompiler {
   );
 }
 
-async function loadCompiler(root: string): Promise<SvelteCompiler> {
+function loadCompiler(root: string): SvelteCompiler {
   let module: unknown;
   try {
-    module = await import(Bun.resolveSync("svelte/compiler", root));
+    module = import.meta.require(Bun.resolveSync("svelte/compiler", root));
   } catch (cause) {
     throw new SvelteBunError(
       "SB_SVELTE_MISSING",
@@ -140,6 +155,36 @@ async function loadCompiler(root: string): Promise<SvelteCompiler> {
   return module;
 }
 
+/**
+ * Svelte refuses a relative `experimental.customRenderer`, since each
+ * component would resolve it from its own directory; it's relative to
+ * `root` here.
+ */
+function withRenderer(
+  compilerOptions: Readonly<Record<string, unknown>> | undefined,
+  root: string,
+): Pick<Setup, "compilerOptions" | "renderer"> {
+  const given = compilerOptions?.experimental;
+  const experimental: object =
+    typeof given === "object" && given !== null ? given : {};
+  const renderer =
+    "customRenderer" in experimental &&
+    typeof experimental.customRenderer === "string"
+      ? experimental.customRenderer
+      : undefined;
+  if (renderer === undefined || !RELATIVE.test(renderer)) {
+    return { compilerOptions, renderer };
+  }
+  const absolute = resolve(root, renderer);
+  return {
+    compilerOptions: {
+      ...compilerOptions,
+      experimental: { ...experimental, customRenderer: absolute },
+    },
+    renderer: absolute,
+  };
+}
+
 // Bun's dev server passes `side` and `hmr` to onLoad; Bun.build doesn't.
 function devServerSide(args: OnLoadArgs): Side | undefined {
   if (!("side" in args)) return undefined;
@@ -150,34 +195,56 @@ function devServerHmr(args: OnLoadArgs): boolean {
   return "hmr" in args ? args.hmr !== false : true;
 }
 
-/** Svelte for `Bun.build` and Bun's dev server. */
+function printWarning(warning: string, path: string): void {
+  if (!NODE_MODULES.test(path)) warn(`svelte: ${warning}`);
+}
+
+/** Svelte for `Bun.build`, Bun's dev server, and Bun's runtime. */
 export function svelte(options: SvelteBunOptions = {}): BunPlugin {
   const root = options.root ?? workingDirectory();
   const production = options.production ?? productionByEnv();
+  const onwarn = options.onwarn ?? printWarning;
   const stylesheets = new Map<string, { css: string; from: string }>();
   const exportsCache: ExportsCache = new Map();
-  // Loaded on first use: the dev server loads plugins before the app runs.
-  let setup: Promise<Setup> | undefined;
-  const ready = (): Promise<Setup> =>
-    (setup ??= (async () => {
-      const config = await loadConfig(root);
-      return {
-        compiler: await loadCompiler(root),
-        preprocess: options.preprocess ?? config.preprocess,
-        compilerOptions: options.compilerOptions ?? config.compilerOptions,
-      };
-    })());
+  // Read on first use, not when the module loads: importing `svelte` from
+  // svelte-bun creates the default export too.
+  let setup: Setup | undefined;
+  const ready = (): Setup => {
+    if (setup) return setup;
+    const config = loadConfig(root);
+    const { compilerOptions, renderer } = withRenderer(
+      options.compilerOptions ?? config.compilerOptions,
+      root,
+    );
+    const conditions = options.conditions ?? ["svelte"];
+    setup = {
+      compiler: loadCompiler(root),
+      preprocess: options.preprocess ?? config.preprocess,
+      compilerOptions,
+      renderer,
+      // That output needs Svelte's custom-renderer runtime.
+      conditions: renderer
+        ? ["svelte-custom-renderer", ...conditions]
+        : conditions,
+    };
+    return setup;
+  };
 
   return {
     name: "svelte-bun",
     setup(build) {
       build.onResolve({ filter: BARE }, (args) => {
-        const path = resolveCondition(args.path, args.importer, exportsCache);
+        const path = resolveCondition(
+          args.path,
+          args.importer,
+          ready().conditions,
+          exportsCache,
+        );
         return path === undefined ? undefined : { path };
       });
 
       build.onLoad({ filter: SVELTE }, async (args) => {
-        const { compiler, preprocess, compilerOptions } = await ready();
+        const { compiler, preprocess, compilerOptions, renderer } = ready();
         const fromDevServer = devServerSide(args);
         const side = options.side ?? fromDevServer ?? "client";
         const loaded = options.load?.(args.path);
@@ -208,6 +275,7 @@ export function svelte(options: SvelteBunOptions = {}): BunPlugin {
             { cause },
           );
         }
+        for (const warning of out.warnings) onwarn(warning, args.path);
         let js = out.js;
         // compat: Bun's dev server re-exports Svelte's `$document` and
         // `$window` by value, before `mount` assigns them, so the client
@@ -215,7 +283,8 @@ export function svelte(options: SvelteBunOptions = {}): BunPlugin {
         if (side === "client" && fromDevServer !== undefined) {
           js = js.replace(LIVE_GLOBAL, "$1");
         }
-        if (side === "client" && out.css !== undefined) {
+        // A custom renderer has no DOM for CSS to style.
+        if (side === "client" && out.css !== undefined && !renderer) {
           // Beside the component, so the CSS's relative `@import`s resolve.
           const id = `${args.path}.css`;
           stylesheets.set(id, { css: out.css, from: args.path });

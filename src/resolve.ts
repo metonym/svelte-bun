@@ -13,25 +13,34 @@ function readExports(root: string): object | undefined {
   return typeof exports === "object" && exports !== null ? exports : {};
 }
 
-function svelteEntry(exports: object, subpath: string): string | undefined {
+function conditionEntry(
+  exports: object,
+  subpath: string,
+  conditions: readonly string[],
+): string | undefined {
   const entry: unknown = Object.entries(exports).find(
     ([key]) => key === subpath,
   )?.[1];
-  if (typeof entry !== "object" || entry === null || !("svelte" in entry)) {
-    return undefined;
+  if (typeof entry !== "object" || entry === null) return undefined;
+  const targets = new Map(Object.entries(entry));
+  for (const condition of conditions) {
+    const target: unknown = targets.get(condition);
+    if (typeof target === "string") return target;
   }
-  return typeof entry.svelte === "string" ? entry.svelte : undefined;
+  return undefined;
 }
 
 /**
- * Resolves a bare specifier through the `svelte` export condition, where
- * component libraries put their source entry, or returns `undefined` to
- * leave it to Bun. Bun's dev server ignores a plugin's `conditions`, so
- * the plugin resolves this one itself.
+ * Resolves a bare specifier through the first of `conditions` its package
+ * exports it under (`svelte`, where component libraries put their source
+ * entry; `svelte-custom-renderer`), or returns `undefined` to leave it to
+ * Bun. Bun's dev server ignores a plugin's `conditions`, and Bun's runtime
+ * takes them only from a CLI flag, so the plugin resolves these itself.
  */
 export function resolveCondition(
   specifier: string,
   importer: string,
+  conditions: readonly string[],
   cache: ExportsCache,
 ): string | undefined {
   const parts = specifier.split("/");
@@ -44,7 +53,7 @@ export function resolveCondition(
     if (!cache.has(root)) cache.set(root, readExports(root));
     const exports = cache.get(root);
     if (exports !== undefined) {
-      const target = svelteEntry(exports, subpath);
+      const target = conditionEntry(exports, subpath, conditions);
       return target === undefined ? undefined : join(root, target);
     }
     if (dir === dirname(dir)) return undefined;

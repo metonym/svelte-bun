@@ -22,6 +22,8 @@ await Bun.build({
 | `preprocess` | Svelte preprocessors | `svelte.config.js`'s |
 | `compilerOptions` | passed to Svelte's `compile()` | `svelte.config.js`'s |
 | `css` | `"external"`: a stylesheet beside the component; `"injected"`: in the JS | `"external"` |
+| `conditions` | export conditions packages resolve through, the first match winning | `["svelte"]` |
+| `onwarn` | what to do with each Svelte warning, `file:line:column message` | print it, except under `node_modules` |
 | `load` | the source to compile in place of a file's own | none |
 
 ## `svelte.config.js`
@@ -32,6 +34,15 @@ and `compilerOptions`.
 An option passed to `svelte()` wins over the file.
 A config that fails to load fails the build with `SB_CONFIG_UNREADABLE`,
 and a `compilerOptions` that isn't an object with `SB_CONFIG_INVALID`.
+
+## `conditions`
+
+Bun's dev server ignores a plugin's export conditions,
+and Bun's runtime takes them only from `--conditions`,
+so svelte-bun resolves these itself:
+a component library that ships its components under `svelte`,
+as Carbon and svelte-highlight do, resolves to them, in a build,
+the dev server, and `bun run`.
 
 ## `css`
 
@@ -65,6 +76,42 @@ const result = await Bun.build({
 });
 await carbon.pruneBuild(result);
 ```
+
+## At runtime
+
+`svelte-bun/register` compiles the `.svelte` files that `bun run`
+and `bun test` import, with the options in `svelte.config.js`:
+
+```toml
+# bunfig.toml
+preload = ["svelte-bun/register"]
+```
+
+It registers the same plugin with `Bun.plugin()`,
+so `conditions` apply there too, with no `--conditions` flag.
+
+## Custom renderers
+
+A custom renderer renders Svelte components to something other than the
+DOM, such as a terminal.
+Name its module in `svelte.config.js`:
+
+```js
+// svelte.config.js
+export default {
+  compilerOptions: {
+    experimental: { customRenderer: "./src/terminal-renderer.js" },
+  },
+};
+```
+
+A relative path is relative to `root`; Svelte itself refuses one,
+since each component would resolve it from its own directory.
+With a renderer set, svelte-bun puts `svelte-custom-renderer` first in
+`conditions`, so `svelte` resolves to the runtime that output needs,
+and emits no CSS, since there's no DOM to style.
+Every `.svelte` file compiles with the renderer, library components too:
+a component and the snippets it renders must share one.
 
 ## Errors
 

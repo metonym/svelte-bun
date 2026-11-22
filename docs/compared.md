@@ -13,6 +13,10 @@ this page lists where svelte-bun differs, each case reproduced.
 | a library's `svelte` export condition | doesn't resolve | ✓ |
 | a relative `@import` in a nested component's `<style>` | doesn't resolve | ✓ |
 | preprocessors, `svelte.config.js` | ✗ | ✓ |
+| custom renderers (`experimental.customRenderer`) | ✗ | ✓ |
+| export conditions in `bun run` without `--conditions` | ✗ | ✓ |
+| a one-line preload for `bun run` and `bun test` | ✗ | `svelte-bun/register` |
+| Svelte's warnings | ✗ dropped | reported, `file:line:column` |
 | `compilerOptions` | 4 of them | all |
 | Svelte's dev-only runtime code dropped in production | ✗ | ✓ |
 | a hook to rewrite source before compiling | ✗ | `load` |
@@ -38,6 +42,13 @@ with the plugin in bunfig, on a fixture app opened in WebKit.
   `components/Card.svelte` fails with `Could not resolve: "./card.css"`,
   in `Bun.build` too.
   svelte-bun writes the CSS as `Card.svelte.css` beside the component.
+
+## From the source
+
+`bun-plugin-svelte` forwards 4 of Svelte's `compilerOptions`:
+`customElement`, `runes`, `modernAst` and `namespace`.
+So `experimental.customRenderer` never reaches the compiler,
+and it never reads a compile's `warnings`.
 
 ## Size
 

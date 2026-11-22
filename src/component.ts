@@ -13,11 +13,15 @@ export type SvelteCompiler = {
   compile(
     source: string,
     options: Record<string, unknown>,
-  ): { js: { code: string }; css: { code: string } | null };
+  ): {
+    js: { code: string };
+    css: { code: string } | null;
+    warnings: readonly SvelteWarning[];
+  };
   compileModule(
     source: string,
     options: Record<string, unknown>,
-  ): { js: { code: string } };
+  ): { js: { code: string }; warnings: readonly SvelteWarning[] };
   preprocess(
     source: string,
     preprocessors: unknown,
@@ -43,9 +47,17 @@ export type CompileFileOptions = {
   compilerOptions?: Readonly<Record<string, unknown>>;
 };
 
+/** The parts of a Svelte warning svelte-bun reports. */
+export type SvelteWarning = {
+  message: string;
+  start?: { line: number; column: number };
+};
+
 /** One compiled file. */
 export type CompiledFile = {
   js: string;
+  /** Svelte's warnings, each as `file:line:column message`. */
+  warnings: string[];
   /** The component's CSS, with `css: "external"` and a `<style>` block. */
   css?: string;
 };
@@ -74,13 +86,27 @@ export function compileFile(
     const js = filename.endsWith(".ts")
       ? typescript.transformSync(source)
       : source;
-    return { js: compiler.compileModule(js, shared).js.code };
+    const result = compiler.compileModule(js, shared);
+    return {
+      js: result.js.code,
+      warnings: result.warnings.map((w) => formatWarning(w, filename)),
+    };
   }
   const result = compiler.compile(source, {
     ...shared,
     css: options.css ?? "external",
     hmr: hmr && side === "client",
   });
+  const warnings = result.warnings.map((w) => formatWarning(w, filename));
   const css = result.css?.code;
-  return css ? { js: result.js.code, css } : { js: result.js.code };
+  return css
+    ? { js: result.js.code, css, warnings }
+    : { js: result.js.code, warnings };
+}
+
+function formatWarning(warning: SvelteWarning, filename: string): string {
+  const at = warning.start
+    ? `:${warning.start.line}:${warning.start.column}`
+    : "";
+  return `${filename}${at} ${warning.message}`;
 }
