@@ -9,48 +9,41 @@ import { SvelteBunError } from "./errors.ts";
 import { inlineEsmEnv } from "./esm-env.ts";
 import { type ExportsCache, resolveCondition } from "./resolve.ts";
 
-/** How the plugin compiles; each key also reads from `svelte.config.js`. */
+/** Options for `svelte()`; the bunfig entries read `svelte.config.js`. */
 export type SvelteBunOptions = {
   /**
-   * Where `svelte.config.js` and the app's `svelte` resolve from. The
-   * default is the working directory.
+   * Where `svelte.config.js` and `svelte` resolve from.
+   * @default the working directory
    */
   root?: string;
   /**
-   * Production output: no dev checks or HMR, and Svelte's dev-only code
-   * dropped. The default is `NODE_ENV === "production"`.
+   * Whether to drop Svelte's dev checks, HMR, and dev-only runtime code.
+   * @default NODE_ENV === "production"
    */
   production?: boolean;
-  /**
-   * The output to generate. The default is what the dev server asks for,
-   * else `"client"`.
-   */
+  /** @default what the dev server asks for, else "client" */
   side?: Side;
-  /** Svelte preprocessors. The default is `svelte.config.js`'s. */
+  /** @default svelte.config.js's */
   preprocess?: unknown;
-  /** Passed to Svelte's `compile()`. The default is `svelte.config.js`'s. */
+  /** @default svelte.config.js's */
   compilerOptions?: Readonly<Record<string, unknown>>;
   /**
-   * `"external"` bundles a component's CSS as a stylesheet beside it, so
-   * its relative `@import`s resolve; `"injected"` puts it in the JS. The
-   * default is `"external"`.
+   * `"external"` writes the CSS beside the component, so its relative
+   * `@import`s resolve; `"injected"` keeps it in the JS.
+   * @default "external"
    */
   css?: "external" | "injected";
   /**
-   * Export conditions to resolve packages through, the first match
-   * winning. `svelte-custom-renderer` comes first when `compilerOptions`
-   * sets `experimental.customRenderer`. The default is `["svelte"]`.
+   * Export conditions, first match wins; a custom renderer puts
+   * `svelte-custom-renderer` first.
+   * @default ["svelte"]
    */
   conditions?: readonly string[];
-  /**
-   * Called with each Svelte warning, as `file:line:column message`. The
-   * default prints it, except for files under `node_modules`.
-   */
+  /** @default prints each warning, except under node_modules */
   onwarn?: (warning: string, path: string) => void;
   /**
-   * The source to compile in place of a `.svelte` file's own, or
-   * `undefined` for its own, before preprocessing: for a source rewriter
-   * such as carbon-preprocess-svelte's `optimizeCarbonBun()`.
+   * Source to compile instead of the file's, before preprocessing, as
+   * carbon-preprocess-svelte's `optimizeCarbonBun()` provides.
    */
   load?: (path: string) => { code: string } | string | undefined;
 };
@@ -81,7 +74,6 @@ const CONFIG_FILES = [
   "svelte.config.ts",
 ];
 
-// The config module's default export, read as svelte-bun reads it.
 function parseConfig(module: unknown, file: string): Config {
   const config =
     typeof module === "object" && module !== null && "default" in module
@@ -155,11 +147,8 @@ function loadCompiler(root: string): SvelteCompiler {
   return module;
 }
 
-/**
- * Svelte refuses a relative `experimental.customRenderer`, since each
- * component would resolve it from its own directory; it's relative to
- * `root` here.
- */
+// Svelte refuses a relative customRenderer, which each component would
+// resolve from its own directory; here it's relative to root.
 function withRenderer(
   compilerOptions: Readonly<Record<string, unknown>> | undefined,
   root: string,
@@ -222,7 +211,6 @@ export function svelte(options: SvelteBunOptions = {}): BunPlugin {
       preprocess: options.preprocess ?? config.preprocess,
       compilerOptions,
       renderer,
-      // That output needs Svelte's custom-renderer runtime.
       conditions: renderer
         ? ["svelte-custom-renderer", ...conditions]
         : conditions,

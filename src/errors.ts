@@ -1,24 +1,17 @@
-/**
- * What a caller does about an error: `setup`, the app is missing
- * something svelte-bun needs; `compile`, Svelte rejected a file; `other`,
- * a failure svelte-bun didn't name.
- */
+/** What to fix: the app's setup, a file, or, for `other`, svelte-bun. */
 export type SvelteBunErrorKind = "setup" | "compile" | "other";
 
-/**
- * Which failure it is, stable across releases: a code is never reused for
- * another meaning.
- */
+/** Which failure it is; a code never changes meaning. */
 export type SvelteBunErrorCode =
-  /** `svelte` isn't installed where the app's root resolves from. */
+  /** `svelte` doesn't resolve from `root`. */
   | "SB_SVELTE_MISSING"
-  /** `svelte.config.js` failed to load: a syntax error, or one it throws. */
+  /** `svelte.config.js` threw while loading. */
   | "SB_CONFIG_UNREADABLE"
-  /** `svelte.config.js` loaded, but a key's value is the wrong type. */
+  /** A `svelte.config.js` value has the wrong type. */
   | "SB_CONFIG_INVALID"
-  /** A preprocessor or the Svelte compiler threw on a file. */
+  /** A preprocessor or Svelte's compiler threw on a file. */
   | "SB_COMPILE_FAILED"
-  /** A failure svelte-bun didn't anticipate: a bug, or the environment. */
+  /** A bug in svelte-bun. */
   | "SB_INTERNAL";
 
 const KINDS: Record<SvelteBunErrorCode, SvelteBunErrorKind> = {
@@ -29,10 +22,7 @@ const KINDS: Record<SvelteBunErrorCode, SvelteBunErrorKind> = {
   SB_INTERNAL: "other",
 };
 
-/**
- * An error svelte-bun names: its `code` says which failure, its `kind`
- * what to do.
- */
+/** An error svelte-bun throws, with a stable `code`. */
 export class SvelteBunError extends Error {
   readonly code: SvelteBunErrorCode;
   readonly kind: SvelteBunErrorKind;

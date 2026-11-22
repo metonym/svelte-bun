@@ -1,6 +1,3 @@
-// svelte-bun/compile: everything but the Bun plugin, for a host that
-// bundles on its own.
-
 export type {
   CompiledFile,
   CompileFileOptions,

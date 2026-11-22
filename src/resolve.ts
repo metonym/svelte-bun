@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-/** Each package root's `exports`, or `undefined` where none is installed. */
+/** `undefined` where no package is installed. */
 export type ExportsCache = Map<string, object | undefined>;
 
 function readExports(root: string): object | undefined {
@@ -30,13 +30,8 @@ function conditionEntry(
   return undefined;
 }
 
-/**
- * Resolves a bare specifier through the first of `conditions` its package
- * exports it under (`svelte`, where component libraries put their source
- * entry; `svelte-custom-renderer`), or returns `undefined` to leave it to
- * Bun. Bun's dev server ignores a plugin's `conditions`, and Bun's runtime
- * takes them only from a CLI flag, so the plugin resolves these itself.
- */
+// Bun's dev server ignores a plugin's conditions, and its runtime takes
+// them only from --conditions, so the plugin resolves them itself.
 export function resolveCondition(
   specifier: string,
   importer: string,

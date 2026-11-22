@@ -1,14 +1,7 @@
-// Compiles one Svelte file with no bundler in sight: a `.svelte` component
-// or a `.svelte.ts` / `.svelte.js` rune module. The host decides where the
-// output goes.
-
-/** Which output Svelte generates: for the browser, or for SSR. */
+/** Which output Svelte generates. */
 export type Side = "client" | "server";
 
-/**
- * The parts of `svelte/compiler` svelte-bun calls, typed by shape so any
- * Svelte 5 fits.
- */
+/** The parts of `svelte/compiler` svelte-bun calls. */
 export type SvelteCompiler = {
   compile(
     source: string,
@@ -29,18 +22,22 @@ export type SvelteCompiler = {
   ): Promise<{ code: string }>;
 };
 
-/** How `compileFile` compiles one file. */
+/** Options for `compileFile`. */
 export type CompileFileOptions = {
-  /** As Svelte's warnings and scoped-CSS hashes should show it. */
+  /** The name Svelte's warnings and scoped-CSS hashes use. */
   filename: string;
   side: Side;
-  /** Svelte's development checks. */
+  /** Whether Svelte compiles in its development checks. */
   dev?: boolean;
-  /** Svelte's HMR, client side only: the host provides `import.meta.hot`. */
+  /**
+   * Whether to compile in Svelte's HMR, client side only; the host provides
+   * `import.meta.hot`.
+   */
   hmr?: boolean;
   /**
-   * `"external"` returns the component's CSS for the host to bundle;
-   * `"injected"` puts it in the JS. The default is `"external"`.
+   * `"external"` returns the CSS for the host to bundle; `"injected"`
+   * keeps it in the JS.
+   * @default "external"
    */
   css?: "external" | "injected";
   /** Passed to Svelte's `compile()`; the options above win. */
@@ -53,27 +50,23 @@ export type SvelteWarning = {
   start?: { line: number; column: number };
 };
 
-/** One compiled file. */
+/** What `compileFile` returns. */
 export type CompiledFile = {
   js: string;
   /** Svelte's warnings, each as `file:line:column message`. */
   warnings: string[];
-  /** The component's CSS, with `css: "external"` and a `<style>` block. */
+  /** Set with `css: "external"` when the component has a `<style>`. */
   css?: string;
 };
 
 const RUNE_MODULE = /\.svelte\.[jt]s$/;
 const typescript = new Bun.Transpiler({ loader: "ts" });
 
-// Whether a path is a rune module, `.svelte.ts` or `.svelte.js`.
 function isRuneModule(path: string): boolean {
   return RUNE_MODULE.test(path);
 }
 
-/**
- * Compiles a component or a rune module to JavaScript, and a component's
- * CSS when `css` is `"external"`.
- */
+/** Compiles a component, or a `.svelte.ts` or `.svelte.js` rune module. */
 export function compileFile(
   compiler: SvelteCompiler,
   source: string,
