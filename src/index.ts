@@ -202,8 +202,8 @@ export function svelte(options: SvelteBunOptions = {}): BunPlugin {
   const stylesheets = new Map<string, { css: string; from: string }>();
   const exportsCache: ExportsCache = new Map();
   const barrelCache: BarrelCache = new Map();
-  // Read on first use, not when the module loads: importing `svelte` from
-  // svelte-bun creates the default export too.
+  // Read on first use, not when the module loads, because importing
+  // `svelte` from svelte-bun creates the default export too.
   let setup: Setup | undefined;
   const ready = (): Setup => {
     if (setup) return setup;

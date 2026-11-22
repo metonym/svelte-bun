@@ -1,14 +1,15 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-// Each barrel's exports: name -> the file and name it re-exports, or
-// undefined for a module that does more than re-export.
+// undefined marks a module that does more than re-export, so imports from
+// it stay as written.
 export type BarrelCache = Map<string, Map<string, Target> | undefined>;
 
 type Target = { file: string; name: string };
 
 const SCRIPT = /(<script\b[^>]*>)([\s\S]*?)(<\/script>)/g;
-// `import { a, b as c } from "lib"`, or `import A from "lib"`.
+// Only `import { a, b as c } from "lib"` and `import A from "lib"`; never
+// a namespace or side-effect import.
 const IMPORT =
   /^([ \t]*)import\s+(?:\{([^}]*)\}|([A-Za-z_$][\w$]*))\s*from\s*(["'])([^"']+)\4;?/gm;
 const REEXPORT = /^export\s*\{([^}]*)\}\s*from\s*(["'])(\.{1,2}\/[^"']+)\2$/;
