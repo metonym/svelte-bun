@@ -17,7 +17,7 @@ await Bun.build({
 | Option | Sets | Default |
 | :--- | :--- | :--- |
 | `root` | where `svelte.config.js` and `svelte` resolve from | the working directory |
-| `production` | no development checks or HMR, and Svelte's dev-only runtime code dropped | `NODE_ENV === "production"` |
+| `production` | no development checks or HMR, Svelte's dev-only runtime code dropped, and `process.env.NODE_ENV` defined as `"production"` | `NODE_ENV === "production"` |
 | `side` | `"client"` or `"server"` output | what the dev server asks for, else `"client"` |
 | `preprocess` | Svelte preprocessors | `svelte.config.js`'s |
 | `compilerOptions` | passed to Svelte's `compile()` | `svelte.config.js`'s |
@@ -51,6 +51,15 @@ With `"external"`, a component's CSS becomes a stylesheet next to it,
 a relative `@import` in the component's `<style>` resolves from the
 component's directory.
 `"injected"` puts the CSS in the component's JavaScript instead.
+
+## Library barrels
+
+A component library's `index.js` often only re-exports its components.
+Bun drops the components an app doesn't use, but keeps their CSS,
+so svelte-bun rewrites a component's named import from such a barrel,
+`import { Highlight } from "svelte-highlight"`,
+to the file it re-exports.
+A barrel that does anything else is left alone.
 
 ## `load`
 

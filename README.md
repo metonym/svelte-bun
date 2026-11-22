@@ -91,6 +91,8 @@ instead.
   every option, `svelte.config.js`, custom renderers, and the preload
 - [Compile API](https://github.com/metonym/svelte-bun/blob/master/docs/compile.md):
   `compileFile()` and `scanImports()`, for another host
+- [Recipes](https://github.com/metonym/svelte-bun/blob/master/docs/recipes.md):
+  prerendering, hydrating, build-time data, CSS types
 - [Compared](https://github.com/metonym/svelte-bun/blob/master/docs/compared.md):
   what differs from `bun-plugin-svelte`, and how it was measured
 
