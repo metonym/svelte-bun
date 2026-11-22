@@ -1,6 +1,6 @@
 {
   "name": "svelte-bun",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Svelte for Bun.build and Bun's dev server.",
   "license": "MIT",
   "author": "Eric Liu (https://github.com/metonym)",
