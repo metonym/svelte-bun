@@ -1,4 +1,3 @@
-/** Which output Svelte generates. */
 export type Side = "client" | "server";
 
 /** The parts of `svelte/compiler` svelte-bun calls. */
@@ -22,12 +21,10 @@ export type SvelteCompiler = {
   ): Promise<{ code: string }>;
 };
 
-/** Options for `compileFile`. */
 export type CompileFileOptions = {
   /** The name Svelte's warnings and scoped-CSS hashes use. */
   filename: string;
   side: Side;
-  /** Whether Svelte compiles in its development checks. */
   dev?: boolean;
   /**
    * Whether to compile in Svelte's HMR, client side only; the host provides
@@ -44,13 +41,11 @@ export type CompileFileOptions = {
   compilerOptions?: Readonly<Record<string, unknown>>;
 };
 
-/** The parts of a Svelte warning svelte-bun reports. */
 export type SvelteWarning = {
   message: string;
   start?: { line: number; column: number };
 };
 
-/** What `compileFile` returns. */
 export type CompiledFile = {
   js: string;
   /** Svelte's warnings, each as `file:line:column message`. */

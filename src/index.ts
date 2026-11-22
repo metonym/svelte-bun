@@ -296,6 +296,8 @@ export function svelte(options: SvelteBunOptions = {}): BunPlugin {
       });
 
       if (production) {
+        // compat: Bun doesn't fold a constant imported from another
+        // module, so Svelte's `if (DEV)` branches would ship.
         const browser = (options.side ?? "client") === "client";
         build.onLoad({ filter: SVELTE_RUNTIME }, async (args) => ({
           contents: inlineEsmEnv(await Bun.file(args.path).text(), {

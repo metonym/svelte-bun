@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-/** `undefined` where no package is installed. */
+// undefined where no package is installed.
 export type ExportsCache = Map<string, object | undefined>;
 
 function readExports(root: string): object | undefined {

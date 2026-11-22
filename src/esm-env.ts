@@ -1,11 +1,6 @@
 const ESM_ENV_IMPORT = /^import \{([^}]+)\} from ['"]esm-env['"];?$/gm;
 const ALIAS = /\s+as\s+/;
 
-/**
- * Inlines `esm-env`'s `DEV`, `BROWSER` and `NODE` in a module that imports
- * them. Bun doesn't fold constants imported from another module, so
- * without this every `if (DEV)` branch of Svelte's runtime ships.
- */
 export function inlineEsmEnv(
   source: string,
   env: { dev: boolean; browser: boolean },
