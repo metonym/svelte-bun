@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 
 import type { BunPlugin, OnLoadArgs } from "bun";
@@ -64,7 +64,12 @@ type Setup = {
 const SVELTE = /\.svelte(\.[jt]s)?$/;
 const SVELTE_CSS = /\.svelte\.css$/;
 const BARE = /^[@a-z]/;
-const SVELTE_RUNTIME = /[\\/]node_modules[\\/]svelte[\\/]src[\\/].+\.js$/;
+// Svelte's runtime, not its compiler. At runtime the hook runs on every
+// module Bun loads, so it stays synchronous: a module an async onLoad
+// returns is async, so is each importer, and import.meta.require can't
+// load the compiler then.
+const SVELTE_RUNTIME =
+  /[\\/]node_modules[\\/]svelte[\\/]src[\\/](?!compiler[\\/]).+\.js$/;
 const LIVE_GLOBAL = /\$\.(document|window)\b/g;
 const NODE_MODULES = /[\\/]node_modules[\\/]/;
 const RELATIVE = /^\.\.?([\\/]|$)/;
@@ -299,8 +304,8 @@ export function svelte(options: SvelteBunOptions = {}): BunPlugin {
         // compat: Bun doesn't fold a constant imported from another
         // module, so Svelte's `if (DEV)` branches would ship.
         const browser = (options.side ?? "client") === "client";
-        build.onLoad({ filter: SVELTE_RUNTIME }, async (args) => ({
-          contents: inlineEsmEnv(await Bun.file(args.path).text(), {
+        build.onLoad({ filter: SVELTE_RUNTIME }, (args) => ({
+          contents: inlineEsmEnv(readFileSync(args.path, "utf8"), {
             dev: false,
             browser,
           }),
