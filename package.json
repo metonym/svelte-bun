@@ -1,0 +1,31 @@
+{
+  "name": "svelte-bun",
+  "version": "0.1.0",
+  "description": "Svelte for Bun.build and Bun's dev server.",
+  "license": "MIT",
+  "author": "Eric Liu (https://github.com/metonym)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/metonym/svelte-bun.git"
+  },
+  "homepage": "https://github.com/metonym/svelte-bun",
+  "bugs": "https://github.com/metonym/svelte-bun/issues",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./src/index.ts"
+    },
+    "./compile": {
+      "types": "./compile.d.ts",
+      "default": "./src/compile.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "peerDependencies": {
+    "svelte": "^5.0.0"
+  },
+  "engines": {
+    "bun": ">=1.4.0"
+  }
+}
