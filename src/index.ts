@@ -71,7 +71,6 @@ const BARE = /^[@a-z]/;
 // load the compiler then.
 const SVELTE_RUNTIME =
   /[\\/]node_modules[\\/]svelte[\\/]src[\\/](?!compiler[\\/]).+\.js$/;
-const LIVE_GLOBAL = /\$\.(document|window)\b/g;
 const NODE_MODULES = /[\\/]node_modules[\\/]/;
 const RELATIVE = /^\.\.?([\\/]|$)/;
 const CONFIG_FILES = [
@@ -309,12 +308,6 @@ export function svelte(options: SvelteBunOptions = {}): BunPlugin {
         }
         for (const warning of out.warnings) onwarn(warning, args.path);
         let js = out.js;
-        // compat: Bun's dev server re-exports Svelte's `$document` and
-        // `$window` by value, before `mount` assigns them, so the client
-        // reads the globals instead.
-        if (side === "client" && fromDevServer !== undefined) {
-          js = js.replace(LIVE_GLOBAL, "$1");
-        }
         // A custom renderer has no DOM for CSS to style.
         if (side === "client" && out.css !== undefined && !renderer) {
           // Beside the component, so the CSS's relative `@import`s resolve.
