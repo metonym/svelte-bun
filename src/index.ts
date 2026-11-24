@@ -3,7 +3,6 @@ import { basename, dirname, join, resolve } from "node:path";
 
 import type { BunPlugin, OnLoadArgs } from "bun";
 
-import { type BarrelCache, rewriteBarrelImports } from "./barrel.ts";
 import { compileFile, type Side, type SvelteCompiler } from "./component.ts";
 import { productionByEnv, warn, workingDirectory } from "./env.ts";
 import { SvelteBunError } from "./errors.ts";
@@ -200,7 +199,6 @@ export function svelte(options: SvelteBunOptions = {}): BunPlugin {
   const onwarn = options.onwarn ?? printWarning;
   const stylesheets = new Map<string, { css: string; from: string }>();
   const exportsCache: ExportsCache = new Map();
-  const barrelCache: BarrelCache = new Map();
   // Read on first use, not when the module loads, because importing
   // `svelte` from svelte-bun creates the default export too.
   let setup: Setup | undefined;
@@ -222,21 +220,6 @@ export function svelte(options: SvelteBunOptions = {}): BunPlugin {
         : conditions,
     };
     return setup;
-  };
-
-  const resolveEntry = (specifier: string, importer: string) => {
-    const viaCondition = resolveCondition(
-      specifier,
-      importer,
-      ready().conditions,
-      exportsCache,
-    );
-    if (viaCondition !== undefined) return viaCondition;
-    try {
-      return Bun.resolveSync(specifier, dirname(importer));
-    } catch {
-      return undefined;
-    }
   };
 
   return {
@@ -280,14 +263,6 @@ export function svelte(options: SvelteBunOptions = {}): BunPlugin {
             source = (
               await compiler.preprocess(source, preprocess, { filename })
             ).code;
-          }
-          if (args.path.endsWith(".svelte")) {
-            source = rewriteBarrelImports(
-              source,
-              args.path,
-              resolveEntry,
-              barrelCache,
-            );
           }
           out = compileFile(compiler, source, {
             filename: args.path,

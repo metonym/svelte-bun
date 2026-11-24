@@ -52,15 +52,6 @@ a relative `@import` in the component's `<style>` resolves from the
 component's directory.
 `"injected"` puts the CSS in the component's JavaScript instead.
 
-## Library barrels
-
-A component library's `index.js` often only re-exports its components.
-Bun drops the components an app doesn't use, but keeps their CSS,
-so svelte-bun rewrites a component's named import from such a barrel,
-`import { Highlight } from "svelte-highlight"`,
-to the file it re-exports.
-A barrel that does anything else is left alone.
-
 ## `load`
 
 `load(path)` returns the source to compile for a `.svelte` file,
