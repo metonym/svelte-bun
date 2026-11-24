@@ -62,9 +62,9 @@ and each plugin in production mode
 | `bun-plugin-svelte` 0.0.6 | 56.7 kB | 21.2 kB |
 | `svelte-bun` | 49.2 kB | 18.7 kB |
 
-Bun doesn't fold constants imported from another module,
-so Svelte's runtime keeps every `if (DEV)` branch
-unless the plugin inlines `esm-env`'s values, as svelte-bun does.
+Before oven-sh/bun#49460, Bun didn't fold constants imported from
+another module, so Svelte's runtime kept every `if (DEV)` branch
+unless the plugin inlined `esm-env`'s values.
 
 ## Related
 
