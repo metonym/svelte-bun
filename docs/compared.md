@@ -31,7 +31,7 @@ with the plugin in bunfig, on a fixture app opened in WebKit.
   binding before `mount` assigns it, so a component that sets the title
   throws
   `undefined is not an object (evaluating '$.document.title = …')`.
-  svelte-bun reads the global in client code instead.
+  Fixed in Bun by oven-sh/bun#49464.
 - **The `svelte` condition**: the dev server ignores a plugin's
   `conditions`, so a library that ships its components under `svelte`,
   as Carbon and svelte-highlight do, fails with
@@ -62,9 +62,9 @@ and each plugin in production mode
 | `bun-plugin-svelte` 0.0.6 | 56.7 kB | 21.2 kB |
 | `svelte-bun` | 49.2 kB | 18.7 kB |
 
-Bun doesn't fold constants imported from another module,
-so Svelte's runtime keeps every `if (DEV)` branch
-unless the plugin inlines `esm-env`'s values, as svelte-bun does.
+Before oven-sh/bun#49460, Bun didn't fold constants imported from
+another module, so Svelte's runtime kept every `if (DEV)` branch
+unless the plugin inlined `esm-env`'s values.
 
 ## Related
 

@@ -1,13 +1,11 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 
 import type { BunPlugin, OnLoadArgs } from "bun";
 
-import { type BarrelCache, rewriteBarrelImports } from "./barrel.ts";
 import { compileFile, type Side, type SvelteCompiler } from "./component.ts";
 import { productionByEnv, warn, workingDirectory } from "./env.ts";
 import { SvelteBunError } from "./errors.ts";
-import { inlineEsmEnv } from "./esm-env.ts";
 import { type ExportsCache, resolveCondition } from "./resolve.ts";
 
 /** Options for `svelte()`; the bunfig entries read `svelte.config.js`. */
@@ -65,13 +63,6 @@ type Setup = {
 const SVELTE = /\.svelte(\.[jt]s)?$/;
 const SVELTE_CSS = /\.svelte\.css$/;
 const BARE = /^[@a-z]/;
-// Svelte's runtime, not its compiler. At runtime the hook runs on every
-// module Bun loads, so it stays synchronous: a module an async onLoad
-// returns is async, so is each importer, and import.meta.require can't
-// load the compiler then.
-const SVELTE_RUNTIME =
-  /[\\/]node_modules[\\/]svelte[\\/]src[\\/](?!compiler[\\/]).+\.js$/;
-const LIVE_GLOBAL = /\$\.(document|window)\b/g;
 const NODE_MODULES = /[\\/]node_modules[\\/]/;
 const RELATIVE = /^\.\.?([\\/]|$)/;
 const CONFIG_FILES = [
@@ -201,7 +192,6 @@ export function svelte(options: SvelteBunOptions = {}): BunPlugin {
   const onwarn = options.onwarn ?? printWarning;
   const stylesheets = new Map<string, { css: string; from: string }>();
   const exportsCache: ExportsCache = new Map();
-  const barrelCache: BarrelCache = new Map();
   // Read on first use, not when the module loads, because importing
   // `svelte` from svelte-bun creates the default export too.
   let setup: Setup | undefined;
@@ -223,21 +213,6 @@ export function svelte(options: SvelteBunOptions = {}): BunPlugin {
         : conditions,
     };
     return setup;
-  };
-
-  const resolveEntry = (specifier: string, importer: string) => {
-    const viaCondition = resolveCondition(
-      specifier,
-      importer,
-      ready().conditions,
-      exportsCache,
-    );
-    if (viaCondition !== undefined) return viaCondition;
-    try {
-      return Bun.resolveSync(specifier, dirname(importer));
-    } catch {
-      return undefined;
-    }
   };
 
   return {
@@ -282,14 +257,6 @@ export function svelte(options: SvelteBunOptions = {}): BunPlugin {
               await compiler.preprocess(source, preprocess, { filename })
             ).code;
           }
-          if (args.path.endsWith(".svelte")) {
-            source = rewriteBarrelImports(
-              source,
-              args.path,
-              resolveEntry,
-              barrelCache,
-            );
-          }
           out = compileFile(compiler, source, {
             filename: args.path,
             side,
@@ -309,12 +276,6 @@ export function svelte(options: SvelteBunOptions = {}): BunPlugin {
         }
         for (const warning of out.warnings) onwarn(warning, args.path);
         let js = out.js;
-        // compat: Bun's dev server re-exports Svelte's `$document` and
-        // `$window` by value, before `mount` assigns them, so the client
-        // reads the globals instead.
-        if (side === "client" && fromDevServer !== undefined) {
-          js = js.replace(LIVE_GLOBAL, "$1");
-        }
         // A custom renderer has no DOM for CSS to style.
         if (side === "client" && out.css !== undefined && !renderer) {
           // Beside the component, so the CSS's relative `@import`s resolve.
@@ -338,19 +299,6 @@ export function svelte(options: SvelteBunOptions = {}): BunPlugin {
         }
         return { contents: entry.css, loader: "css", watchFiles: [entry.from] };
       });
-
-      if (production) {
-        // compat: Bun doesn't fold a constant imported from another
-        // module, so Svelte's `if (DEV)` branches would ship.
-        const browser = (options.side ?? "client") === "client";
-        build.onLoad({ filter: SVELTE_RUNTIME }, (args) => ({
-          contents: inlineEsmEnv(readFileSync(args.path, "utf8"), {
-            dev: false,
-            browser,
-          }),
-          loader: "js",
-        }));
-      }
     },
   };
 }
