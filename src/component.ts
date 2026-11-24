@@ -27,8 +27,8 @@ export type CompileFileOptions = {
   side: Side;
   dev?: boolean;
   /**
-   * Whether to compile in Svelte's HMR, client side only; the host provides
-   * `import.meta.hot`.
+   * Whether to compile in Svelte's HMR, client side only; the host
+   * provides `import.meta.hot`.
    */
   hmr?: boolean;
   /**

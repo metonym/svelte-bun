@@ -82,8 +82,8 @@ await Bun.build({
 
 `production` drops Svelte's development checks and the dev-only code in
 its runtime; it defaults to `NODE_ENV === "production"`.
-A host with its own bundler compiles files through `svelte-bun/compile`
-instead.
+A host with its own bundler compiles files through
+`svelte-bun/compile` instead.
 
 ## Docs
 

@@ -34,8 +34,8 @@ with the plugin in bunfig, on a fixture app opened in WebKit.
   svelte-bun reads the global in client code instead.
 - **The `svelte` condition**: the dev server ignores a plugin's
   `conditions`, so a library that ships its components under `svelte`,
-  as Carbon and svelte-highlight do, fails with
-  `Could not resolve: "fake-lib"`.
+  as Carbon and svelte-highlight do, fails
+  with `Could not resolve: "fake-lib"`.
   svelte-bun resolves that condition itself.
 - **A relative `@import`**: `bun-plugin-svelte` bundles a component's
   CSS from a virtual path, so `@import "./card.css"` in
