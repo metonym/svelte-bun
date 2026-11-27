@@ -28,14 +28,14 @@ A `.svelte` file compiles as a component;
 a `.svelte.ts` or `.svelte.js` file compiles as a rune module,
 with its TypeScript stripped first.
 
-| Option | Sets |
-| :--- | :--- |
-| `filename` | the name Svelte's warnings and CSS hashes use |
-| `side` | `"client"` or `"server"` |
-| `dev` | Svelte's development checks |
-| `hmr` | Svelte's HMR code, client side only; the host provides `import.meta.hot` |
-| `css` | `"external"` returns the CSS as `css`; `"injected"` keeps it in `js` |
-| `compilerOptions` | the rest of Svelte's `compile()` options |
+| Option            | Sets                                                                     |
+| :---------------- | :----------------------------------------------------------------------- |
+| `filename`        | the name Svelte's warnings and CSS hashes use                            |
+| `side`            | `"client"` or `"server"`                                                 |
+| `dev`             | Svelte's development checks                                              |
+| `hmr`             | Svelte's HMR code, client side only; the host provides `import.meta.hot` |
+| `css`             | `"external"` returns the CSS as `css`; `"injected"` keeps it in `js`     |
+| `compilerOptions` | the rest of Svelte's `compile()` options                                 |
 
 `compiler` is the app's own `svelte/compiler`,
 so the app's Svelte version compiles its files.

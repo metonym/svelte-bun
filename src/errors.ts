@@ -9,6 +9,8 @@ export type SvelteBunErrorCode =
   | "SB_CONFIG_UNREADABLE"
   /** A `svelte.config.js` value has the wrong type. */
   | "SB_CONFIG_INVALID"
+  /** A component resolves a different copy of Svelte than `root` does. */
+  | "SB_DUPLICATE_SVELTE"
   /** A preprocessor or Svelte's compiler threw on a file. */
   | "SB_COMPILE_FAILED"
   /** A bug in svelte-bun. */
@@ -18,6 +20,7 @@ const KINDS: Record<SvelteBunErrorCode, SvelteBunErrorKind> = {
   SB_SVELTE_MISSING: "setup",
   SB_CONFIG_UNREADABLE: "setup",
   SB_CONFIG_INVALID: "setup",
+  SB_DUPLICATE_SVELTE: "setup",
   SB_COMPILE_FAILED: "compile",
   SB_INTERNAL: "other",
 };

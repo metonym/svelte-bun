@@ -3,24 +3,24 @@
 `bun-plugin-svelte` is oven-sh's Svelte plugin for Bun;
 this page lists where svelte-bun differs, each case reproduced.
 
-| | `bun-plugin-svelte` 0.0.6 | `svelte-bun` |
-| :--- | :--- | :--- |
-| components, `<script lang="ts">` | ✓ | ✓ |
-| `.svelte.ts` and `.svelte.js` rune modules | ✓ | ✓ |
-| server output | ✓ | ✓ |
-| HMR in Bun's dev server | ✓ | ✓ |
-| `<svelte:head>` in the dev server | crashes | ✓ |
-| a library's `svelte` export condition | doesn't resolve | ✓ |
-| a relative `@import` in a nested component's `<style>` | doesn't resolve | ✓ |
-| preprocessors, `svelte.config.js` | ✗ | ✓ |
-| custom renderers (`experimental.customRenderer`) | ✗ | ✓ |
-| export conditions in `bun run` without `--conditions` | ✗ | ✓ |
-| a one-line preload for `bun run` and `bun test` | ✗ | `svelte-bun/register` |
-| Svelte's warnings | ✗ dropped | reported, `file:line:column` |
-| `compilerOptions` | 4 of them | all |
-| Svelte's dev-only runtime code dropped in production | ✗ | ✓ |
-| a hook to rewrite source before compiling | ✗ | `load` |
-| a compile API for another host | ✗ | `svelte-bun/compile` |
+|                                                        | `bun-plugin-svelte` 0.0.6 | `svelte-bun`                 |
+| :----------------------------------------------------- | :------------------------ | :--------------------------- |
+| components, `<script lang="ts">`                       | ✓                         | ✓                            |
+| `.svelte.ts` and `.svelte.js` rune modules             | ✓                         | ✓                            |
+| server output                                          | ✓                         | ✓                            |
+| HMR in Bun's dev server                                | ✓                         | ✓                            |
+| `<svelte:head>` in the dev server                      | crashes                   | ✓                            |
+| a library's `svelte` export condition                  | doesn't resolve           | ✓                            |
+| a relative `@import` in a nested component's `<style>` | doesn't resolve           | ✓                            |
+| preprocessors, `svelte.config.js`                      | ✗                         | ✓                            |
+| custom renderers (`experimental.customRenderer`)       | ✗                         | ✓                            |
+| export conditions in `bun run` without `--conditions`  | ✗                         | ✓                            |
+| a one-line preload for `bun run` and `bun test`        | ✗                         | `svelte-bun/register`        |
+| Svelte's warnings                                      | ✗ dropped                 | reported, `file:line:column` |
+| `compilerOptions`                                      | 4 of them                 | all                          |
+| Svelte's dev-only runtime code dropped in production   | ✗                         | ✓                            |
+| a hook to rewrite source before compiling              | ✗                         | `load`                       |
+| a compile API for another host                         | ✗                         | `svelte-bun/compile`         |
 
 ## The dev server
 
@@ -42,6 +42,15 @@ with the plugin in bunfig, on a fixture app opened in WebKit.
   `components/Card.svelte` fails with `Could not resolve: "./card.css"`,
   in `Bun.build` too.
   svelte-bun writes the CSS as `Card.svelte.css` beside the component.
+- **Two copies of Svelte**: when components resolve `svelte` from two
+  folders, as a docs folder with its own `node_modules` does,
+  the bundle holds two runtimes and the page renders
+  nothing: `TypeError: Cannot read properties of null (reading 'f')`.
+  vite-plugin-svelte dedupes `svelte` in a resolve hook,
+  but in Bun's dev server any plugin that resolves `svelte/*` turns
+  every hot update into a full reload.
+  svelte-bun fails with `SB_DUPLICATE_SVELTE` instead,
+  naming both copies; the fix is one install of Svelte.
 
 ## From the source
 
@@ -57,10 +66,10 @@ mounted from `index.html`, built with `minify: true`
 and each plugin in production mode
 (`development: false`, `production: true`), Svelte 5.59.1:
 
-| Plugin | JavaScript | gzip |
-| :--- | ---: | ---: |
-| `bun-plugin-svelte` 0.0.6 | 56.7 kB | 21.2 kB |
-| `svelte-bun` | 49.2 kB | 18.7 kB |
+| Plugin                    | JavaScript |    gzip |
+| :------------------------ | ---------: | ------: |
+| `bun-plugin-svelte` 0.0.6 |    56.7 kB | 21.2 kB |
+| `svelte-bun`              |    49.2 kB | 18.7 kB |
 
 Bun doesn't fold constants imported from another module,
 so Svelte's runtime keeps every `if (DEV)` branch

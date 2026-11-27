@@ -14,17 +14,17 @@ await Bun.build({
 });
 ```
 
-| Option | Sets | Default |
-| :--- | :--- | :--- |
-| `root` | where `svelte.config.js` and `svelte` resolve from | the working directory |
-| `production` | no development checks or HMR, Svelte's dev-only runtime code dropped, and `process.env.NODE_ENV` defined as `"production"` | `NODE_ENV === "production"` |
-| `side` | `"client"` or `"server"` output | what the dev server asks for, else `"client"` |
-| `preprocess` | Svelte preprocessors | `svelte.config.js`'s |
-| `compilerOptions` | passed to Svelte's `compile()` | `svelte.config.js`'s |
-| `css` | `"external"`: a stylesheet beside the component; `"injected"`: in the JS | `"external"` |
-| `conditions` | export conditions packages resolve through, the first match winning | `["svelte"]` |
-| `onwarn` | what to do with each Svelte warning, `file:line:column message` | print it, except under `node_modules` |
-| `load` | the source to compile in place of a file's own | none |
+| Option            | Sets                                                                                                                       | Default                                       |
+| :---------------- | :------------------------------------------------------------------------------------------------------------------------- | :-------------------------------------------- |
+| `root`            | where `svelte.config.js` and `svelte` resolve from                                                                         | the working directory                         |
+| `production`      | no development checks or HMR, Svelte's dev-only runtime code dropped, and `process.env.NODE_ENV` defined as `"production"` | `NODE_ENV === "production"`                   |
+| `side`            | `"client"` or `"server"` output                                                                                            | what the dev server asks for, else `"client"` |
+| `preprocess`      | Svelte preprocessors                                                                                                       | `svelte.config.js`'s                          |
+| `compilerOptions` | passed to Svelte's `compile()`                                                                                             | `svelte.config.js`'s                          |
+| `css`             | `"external"`: a stylesheet beside the component; `"injected"`: in the JS                                                   | `"external"`                                  |
+| `conditions`      | export conditions packages resolve through, the first match winning                                                        | `["svelte"]`                                  |
+| `onwarn`          | what to do with each Svelte warning, `file:line:column message`                                                            | print it, except under `node_modules`         |
+| `load`            | the source to compile in place of a file's own                                                                             | none                                          |
 
 ## `svelte.config.js`
 
@@ -34,6 +34,9 @@ and `compilerOptions`.
 An option passed to `svelte()` wins over the file.
 A config that fails to load fails the build with `SB_CONFIG_UNREADABLE`,
 and a `compilerOptions` that isn't an object with `SB_CONFIG_INVALID`.
+A component that resolves another copy of Svelte than `root` does fails
+with `SB_DUPLICATE_SVELTE`, naming both:
+two runtimes on a page render nothing.
 
 ## `conditions`
 

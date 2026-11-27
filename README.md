@@ -10,14 +10,14 @@ and it handles the cases where Bun's dev server breaks a Svelte app.
 When Svelte rejects a file, the build fails with the file
 and Svelte's message.
 
-| On Bun 1.4.6, Svelte 5.59.1 | `bun-plugin-svelte` 0.0.6 | `svelte-bun` |
-| :--- | :--- | :--- |
-| `<svelte:head>` in the dev server | `undefined is not an object (evaluating '$.document.title = …')` | ✓ |
-| a library's `svelte` export condition | `Could not resolve: "fake-lib"` | ✓ |
-| `@import "./card.css"` in a component in a subdirectory | `Could not resolve: "./card.css"` | ✓ |
-| preprocessors and `svelte.config.js` | ✗ | ✓ |
-| a custom renderer, in `bun run` and `bun test` | ✗ can't pass `experimental.customRenderer` | ✓ |
-| a minimal app, `minify: true`, production | 21.2 kB gzip | 18.7 kB gzip |
+| On Bun 1.4.6, Svelte 5.59.1                             | `bun-plugin-svelte` 0.0.6                                        | `svelte-bun` |
+| :------------------------------------------------------ | :--------------------------------------------------------------- | :----------- |
+| `<svelte:head>` in the dev server                       | `undefined is not an object (evaluating '$.document.title = …')` | ✓            |
+| a library's `svelte` export condition                   | `Could not resolve: "fake-lib"`                                  | ✓            |
+| `@import "./card.css"` in a component in a subdirectory | `Could not resolve: "./card.css"`                                | ✓            |
+| preprocessors and `svelte.config.js`                    | ✗                                                                | ✓            |
+| a custom renderer, in `bun run` and `bun test`          | ✗ can't pass `experimental.customRenderer`                       | ✓            |
+| a minimal app, `minify: true`, production               | 21.2 kB gzip                                                     | 18.7 kB gzip |
 
 ## Quick start
 

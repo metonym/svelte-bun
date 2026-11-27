@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 
 import type { BunPlugin, OnLoadArgs } from "bun";
@@ -190,6 +190,22 @@ function devServerHmr(args: OnLoadArgs): boolean {
   return "hmr" in args ? args.hmr !== false : true;
 }
 
+// Svelte's client runtime as `from` resolves it, by real path, so a
+// symlink to the same copy is the same; undefined where Svelte doesn't
+// resolve at all.
+function runtimeFrom(from: string): string | undefined {
+  try {
+    return realpathSync(Bun.resolveSync("svelte/internal/client", from));
+  } catch {
+    return undefined;
+  }
+}
+
+// A person fixes a duplicate by its package folder, not by the file
+// inside it, so the message names the folder.
+const packageOf = (runtime: string): string =>
+  runtime.slice(0, runtime.search(/[\\/]src[\\/]internal[\\/]/)) || runtime;
+
 function printWarning(warning: string, path: string): void {
   if (!NODE_MODULES.test(path)) warn(`svelte: ${warning}`);
 }
@@ -202,6 +218,26 @@ export function svelte(options: SvelteBunOptions = {}): BunPlugin {
   const stylesheets = new Map<string, { css: string; from: string }>();
   const exportsCache: ExportsCache = new Map();
   const barrelCache: BarrelCache = new Map();
+  // A component's directory → the Svelte runtime it resolves, so each
+  // directory resolves once.
+  const runtimes = new Map<string, string | undefined>();
+  let rootRuntime: string | undefined | null = null;
+  // Two copies of Svelte in one bundle render nothing, with a TypeError
+  // that names neither; here the error names both. A resolve hook that
+  // dedupes `svelte` instead would make every hot update in Bun's dev
+  // server a full reload (docs/compared.md).
+  const checkRuntime = (path: string) => {
+    if (rootRuntime === null) rootRuntime = runtimeFrom(join(root, "x"));
+    const dir = dirname(path);
+    if (!runtimes.has(dir)) runtimes.set(dir, runtimeFrom(path));
+    const runtime = runtimes.get(dir);
+    if (runtime === undefined || rootRuntime === undefined) return;
+    if (runtime === rootRuntime) return;
+    throw new SvelteBunError(
+      "SB_DUPLICATE_SVELTE",
+      `svelte-bun: two copies of Svelte: ${path} loads ${packageOf(runtime)}, and ${root} loads ${packageOf(rootRuntime)}; a page with two runtimes renders nothing: install Svelte once`,
+    );
+  };
   // Read on first use, not when the module loads, because importing
   // `svelte` from svelte-bun creates the default export too.
   let setup: Setup | undefined;
@@ -269,6 +305,7 @@ export function svelte(options: SvelteBunOptions = {}): BunPlugin {
 
       build.onLoad({ filter: SVELTE }, async (args) => {
         const { compiler, preprocess, compilerOptions, renderer } = ready();
+        checkRuntime(args.path);
         const fromDevServer = devServerSide(args);
         const side = options.side ?? fromDevServer ?? "client";
         const loaded = options.load?.(args.path);
