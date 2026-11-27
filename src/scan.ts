@@ -4,9 +4,16 @@ export type ScanPart = { code: string; loader: "js" | "ts" };
 const SCRIPT = /<script\b([^>]*)>([\s\S]*?)<\/script>/g;
 const TS_LANG = /\blang=["']ts["']/;
 
-/** Finds the code a Svelte file's imports are in, without compiling it. */
-export function scanImports(source: string, path: string): ScanPart[] {
-  if (!path.endsWith(".svelte")) {
+/**
+ * Finds the code a Svelte file's imports are in, without compiling it. A
+ * file ending in one of `extensions` is a component; any other, script.
+ */
+export function scanImports(
+  source: string,
+  path: string,
+  extensions: readonly string[] = [".svelte"],
+): ScanPart[] {
+  if (!extensions.some((extension) => path.endsWith(extension))) {
     return [{ code: source, loader: path.endsWith(".ts") ? "ts" : "js" }];
   }
   const parts: ScanPart[] = [...source.matchAll(SCRIPT)].map((match) => ({

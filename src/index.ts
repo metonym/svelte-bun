@@ -26,6 +26,12 @@ export type SvelteBunOptions = {
   side?: Side;
   /** @default svelte.config.js's */
   preprocess?: unknown;
+  /**
+   * The file extensions compiled as components, such as `".md"` for
+   * pages a preprocessor turns into components.
+   * @default svelte.config.js's, else [".svelte"]
+   */
+  extensions?: readonly string[];
   /** @default svelte.config.js's */
   compilerOptions?: Readonly<Record<string, unknown>>;
   /**
@@ -51,6 +57,7 @@ export type SvelteBunOptions = {
 
 type Config = {
   preprocess?: unknown;
+  extensions?: readonly string[];
   compilerOptions?: Readonly<Record<string, unknown>>;
 };
 
@@ -62,8 +69,9 @@ type Setup = {
   conditions: readonly string[];
 };
 
-const SVELTE = /\.svelte(\.[jt]s)?$/;
-const SVELTE_CSS = /\.svelte\.css$/;
+const RUNE_MODULE = /\.svelte\.[jt]s$/;
+const escapeRegExp = (text: string) =>
+  text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const BARE = /^[@a-z]/;
 // Svelte's runtime, not its compiler. At runtime the hook runs on every
 // module Bun loads, so it stays synchronous: a module an async onLoad
@@ -88,6 +96,19 @@ function parseConfig(module: unknown, file: string): Config {
   if (typeof config !== "object" || config === null) return {};
   const parsed: Config = {};
   if ("preprocess" in config) parsed.preprocess = config.preprocess;
+  if ("extensions" in config) {
+    const extensions = config.extensions;
+    if (
+      !Array.isArray(extensions) ||
+      !extensions.every((e) => typeof e === "string" && e.startsWith("."))
+    ) {
+      throw new SvelteBunError(
+        "SB_CONFIG_INVALID",
+        `svelte-bun config: ${basename(file)}: extensions is ${JSON.stringify(extensions)}: make it a list such as [".svelte", ".md"]`,
+      );
+    }
+    parsed.extensions = extensions.map(String);
+  }
   if ("compilerOptions" in config) {
     const options = config.compilerOptions;
     if (typeof options !== "object" || options === null) {
@@ -241,9 +262,11 @@ export function svelte(options: SvelteBunOptions = {}): BunPlugin {
   // Read on first use, not when the module loads, because importing
   // `svelte` from svelte-bun creates the default export too.
   let setup: Setup | undefined;
+  let config: Config | undefined;
+  const configOf = (): Config => (config ??= loadConfig(root));
   const ready = (): Setup => {
     if (setup) return setup;
-    const config = loadConfig(root);
+    const config = configOf();
     const { compilerOptions, renderer } = withRenderer(
       options.compilerOptions ?? config.compilerOptions,
       root,
@@ -279,6 +302,14 @@ export function svelte(options: SvelteBunOptions = {}): BunPlugin {
   return {
     name: "svelte-bun",
     setup(build) {
+      // The extensions decide the hooks' filters, so they're read here,
+      // when the plugin is used, not on import.
+      const extensions = options.extensions ??
+        configOf().extensions ?? [".svelte"];
+      const ends = extensions.map(escapeRegExp).join("|");
+      const component = new RegExp(`(${ends})$`);
+      const COMPONENT_OR_RUNES = new RegExp(`(${ends})$|${RUNE_MODULE.source}`);
+      const COMPONENT_CSS = new RegExp(`(${ends})\\.css$`);
       // compat: Bun runs a build's macros, and leaves
       // process.env.NODE_ENV in its output, as development unless the
       // build defines it. Bun.plugin() at runtime has no config, though
@@ -303,7 +334,7 @@ export function svelte(options: SvelteBunOptions = {}): BunPlugin {
         return path === undefined ? undefined : { path };
       });
 
-      build.onLoad({ filter: SVELTE }, async (args) => {
+      build.onLoad({ filter: COMPONENT_OR_RUNES }, async (args) => {
         const { compiler, preprocess, compilerOptions, renderer } = ready();
         checkRuntime(args.path);
         const fromDevServer = devServerSide(args);
@@ -313,13 +344,13 @@ export function svelte(options: SvelteBunOptions = {}): BunPlugin {
         let source = replaced ?? (await Bun.file(args.path).text());
         let out;
         try {
-          if (preprocess !== undefined && args.path.endsWith(".svelte")) {
+          if (preprocess !== undefined && component.test(args.path)) {
             const filename = args.path;
             source = (
               await compiler.preprocess(source, preprocess, { filename })
             ).code;
           }
-          if (args.path.endsWith(".svelte")) {
+          if (component.test(args.path)) {
             source = rewriteBarrelImports(
               source,
               args.path,
@@ -362,10 +393,10 @@ export function svelte(options: SvelteBunOptions = {}): BunPlugin {
         return { contents: js, loader: "js" };
       });
 
-      build.onResolve({ filter: SVELTE_CSS }, (args) => ({
+      build.onResolve({ filter: COMPONENT_CSS }, (args) => ({
         path: join(dirname(args.importer), args.path),
       }));
-      build.onLoad({ filter: SVELTE_CSS }, (args) => {
+      build.onLoad({ filter: COMPONENT_CSS }, (args) => {
         const entry = stylesheets.get(args.path);
         if (!entry) {
           throw new SvelteBunError(

@@ -20,6 +20,7 @@ await Bun.build({
 | `production`      | no development checks or HMR, Svelte's dev-only runtime code dropped, and `process.env.NODE_ENV` defined as `"production"` | `NODE_ENV === "production"`                   |
 | `side`            | `"client"` or `"server"` output                                                                                            | what the dev server asks for, else `"client"` |
 | `preprocess`      | Svelte preprocessors                                                                                                       | `svelte.config.js`'s                          |
+| `extensions`      | the file extensions compiled as components, such as `".md"` for pages a preprocessor turns into components                    | `svelte.config.js`'s, else `[".svelte"]`      |
 | `compilerOptions` | passed to Svelte's `compile()`                                                                                             | `svelte.config.js`'s                          |
 | `css`             | `"external"`: a stylesheet beside the component; `"injected"`: in the JS                                                   | `"external"`                                  |
 | `conditions`      | export conditions packages resolve through, the first match winning                                                        | `["svelte"]`                                  |
@@ -29,14 +30,25 @@ await Bun.build({
 ## `svelte.config.js`
 
 svelte-bun reads the first of `svelte.config.js`,
-`.mjs` and `.ts` in `root`, and takes its `preprocess`
-and `compilerOptions`.
+`.mjs` and `.ts` in `root`, and takes its `preprocess`,
+`compilerOptions` and `extensions`, as vite-plugin-svelte does.
 An option passed to `svelte()` wins over the file.
 A config that fails to load fails the build with `SB_CONFIG_UNREADABLE`,
-and a `compilerOptions` that isn't an object with `SB_CONFIG_INVALID`.
+and a `compilerOptions` that isn't an object,
+or `extensions` that aren't a list such as `[".svelte", ".md"]`,
+with `SB_CONFIG_INVALID`.
 A component that resolves another copy of Svelte than `root` does fails
 with `SB_DUPLICATE_SVELTE`, naming both:
 two runtimes on a page render nothing.
+
+## `extensions`
+
+A file ending in one of them is a component: preprocessed, compiled,
+and its CSS written beside it as `<file>.css`,
+in builds and in the dev server.
+A Markdown page a preprocessor turns into a component
+takes `extensions: [".svelte", ".md"]`.
+`.svelte.js` and `.svelte.ts` rune modules compile as before.
 
 ## `conditions`
 
