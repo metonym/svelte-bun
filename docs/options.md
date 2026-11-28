@@ -26,6 +26,8 @@ await Bun.build({
 | `conditions`      | export conditions packages resolve through, the first match winning                                                        | `["svelte"]`                                  |
 | `onwarn`          | what to do with each Svelte warning, `file:line:column message`                                                            | print it, except under `node_modules`         |
 | `load`            | the source to compile in place of a file's own                                                                             | none                                          |
+| `cache`           | keep each component's preprocessed and compiled output on disk, for `Bun.build`: `true`, or a directory                    | `false`                                       |
+| `cacheKey`        | inputs from outside a file that change its preprocessed output                                                             | none                                          |
 
 ## `svelte.config.js`
 
@@ -100,6 +102,56 @@ const result = await Bun.build({
 });
 await carbon.pruneBuild(result);
 ```
+
+## `cache`
+
+`cache: true` keeps each component's preprocessed source
+and compiled output in `node_modules/.cache/svelte-bun` under `root`,
+or in the directory `cache` names, so a warm `Bun.build` skips both:
+
+```ts
+// build.ts
+await Bun.build({
+  entrypoints: ["index.html"],
+  outdir: "dist",
+  plugins: [svelte({ production: true, cache: true })],
+});
+```
+
+On 132 carbon-components-svelte components built with `minify: true`,
+the build took 708 ms without a cache, 757 ms filling an empty one,
+and 122 ms from a warm one, medians of 7 on Bun 1.4.6.
+A hit reports the component's warnings again and keeps its CSS.
+
+An entry is keyed by everything that makes it:
+
+- **Preprocessed**: the path, the source after `load`, `svelte.config.*`
+  and the lockfile beside `root`, since the preprocessors are functions
+  svelte-bun can't read, and what `cacheKey` returns.
+- **Compiled**: the path, the source after preprocessing,
+  the Svelte and svelte-bun versions, `compilerOptions`, the side,
+  production, and `css`.
+
+A preprocessor whose output depends on other files,
+as one that inlines another file's source does,
+names them in `cacheKey`:
+
+```ts
+import { readFileSync } from "node:fs";
+
+svelte({
+  cache: true,
+  // Each file a <FileSource src="…"> inlines, by its content.
+  cacheKey: (path, source) =>
+    [...source.matchAll(/<FileSource src="([^"]+)"/g)]
+      .map(([, file]) => readFileSync(file, "utf8"))
+      .join("\0"),
+});
+```
+
+The dev server doesn't use the cache:
+it keeps compiled modules in memory, and its output has HMR.
+Delete the directory to start over; nothing is evicted.
 
 ## At runtime
 

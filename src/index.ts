@@ -4,6 +4,11 @@ import { basename, dirname, join, resolve } from "node:path";
 import type { BunPlugin, OnLoadArgs } from "bun";
 
 import { type BarrelCache, rewriteBarrelImports } from "./barrel.ts";
+import {
+  type CompileCache,
+  createCompileCache,
+  preprocessSalt,
+} from "./cache.ts";
 import { compileFile, type Side, type SvelteCompiler } from "./component.ts";
 import { productionByEnv, warn, workingDirectory } from "./env.ts";
 import { SvelteBunError } from "./errors.ts";
@@ -53,6 +58,19 @@ export type SvelteBunOptions = {
    * carbon-preprocess-svelte's `optimizeCarbonBun()` provides.
    */
   load?: (path: string) => { code: string } | string | undefined;
+  /**
+   * Keep each component's preprocessed and compiled output on disk, so a
+   * warm `Bun.build` skips both; `true` for
+   * `node_modules/.cache/svelte-bun` under `root`, or a directory. The
+   * dev server keeps its own cache in memory.
+   * @default false
+   */
+  cache?: boolean | string;
+  /**
+   * Inputs from outside the file that change its preprocessed output,
+   * such as the source of files a preprocessor inlines, as one string.
+   */
+  cacheKey?: (path: string, source: string) => string | undefined;
 };
 
 type Config = {
@@ -62,7 +80,7 @@ type Config = {
 };
 
 type Setup = {
-  compiler: SvelteCompiler;
+  compiler: SvelteCompiler & { VERSION?: string };
   preprocess: unknown;
   compilerOptions: Readonly<Record<string, unknown>> | undefined;
   renderer: string | undefined;
@@ -202,6 +220,7 @@ function withRenderer(
 }
 
 // Bun's dev server passes `side` and `hmr` to onLoad; Bun.build doesn't.
+// The side Bun asks for: the dev server's, or Bun.build's by its target.
 function devServerSide(args: OnLoadArgs): Side | undefined {
   if (!("side" in args)) return undefined;
   return args.side === "server" ? "server" : "client";
@@ -227,6 +246,16 @@ function runtimeFrom(from: string): string | undefined {
 const packageOf = (runtime: string): string =>
   runtime.slice(0, runtime.search(/[\\/]src[\\/]internal[\\/]/)) || runtime;
 
+// JSON drops a function, so a custom cssHash's source stands in for it:
+// a changed cssHash must miss the cache.
+function compilerKey(
+  options: Readonly<Record<string, unknown>> | undefined,
+): string {
+  return JSON.stringify(options ?? {}, (_, value: unknown) =>
+    typeof value === "function" ? String(value) : value,
+  );
+}
+
 function printWarning(warning: string, path: string): void {
   if (!NODE_MODULES.test(path)) warn(`svelte: ${warning}`);
 }
@@ -239,6 +268,20 @@ export function svelte(options: SvelteBunOptions = {}): BunPlugin {
   const stylesheets = new Map<string, { css: string; from: string }>();
   const exportsCache: ExportsCache = new Map();
   const barrelCache: BarrelCache = new Map();
+  let diskCache: { cache: CompileCache; salt: string } | null | undefined;
+  const cacheOf = () => {
+    if (diskCache !== undefined) return diskCache;
+    const dir =
+      typeof options.cache === "string"
+        ? resolve(root, options.cache)
+        : options.cache
+          ? join(root, "node_modules/.cache/svelte-bun")
+          : undefined;
+    diskCache = dir
+      ? { cache: createCompileCache(dir), salt: preprocessSalt(root) }
+      : null;
+    return diskCache;
+  };
   // A component's directory → the Svelte runtime it resolves, so each
   // directory resolves once.
   const runtimes = new Map<string, string | undefined>();
@@ -317,6 +360,10 @@ export function svelte(options: SvelteBunOptions = {}): BunPlugin {
       const config: { define?: Record<string, string> } | undefined =
         build.config;
       const define = config?.define ?? {};
+      // compat: Bun passes each onLoad a side in Bun.build too, by target,
+      // so only the config tells the dev server, which names no
+      // entrypoints, from a build; at runtime there's no config.
+      const inDevServer = config !== undefined && !("entrypoints" in config);
       if (config && production && !("process.env.NODE_ENV" in define)) {
         config.define = {
           ...define,
@@ -337,18 +384,31 @@ export function svelte(options: SvelteBunOptions = {}): BunPlugin {
       build.onLoad({ filter: COMPONENT_OR_RUNES }, async (args) => {
         const { compiler, preprocess, compilerOptions, renderer } = ready();
         checkRuntime(args.path);
-        const fromDevServer = devServerSide(args);
-        const side = options.side ?? fromDevServer ?? "client";
+        const side = options.side ?? devServerSide(args) ?? "client";
         const loaded = options.load?.(args.path);
         const replaced = typeof loaded === "string" ? loaded : loaded?.code;
         let source = replaced ?? (await Bun.file(args.path).text());
+        // Not in the dev server, which keeps compiled modules in memory
+        // already, and whose HMR output a cache would have to key too.
+        const disk = inDevServer ? null : cacheOf();
         let out;
         try {
           if (preprocess !== undefined && component.test(args.path)) {
             const filename = args.path;
-            source = (
-              await compiler.preprocess(source, preprocess, { filename })
-            ).code;
+            const key = [
+              args.path,
+              source,
+              disk?.salt,
+              options.cacheKey?.(args.path, source),
+            ];
+            const hit = disk?.cache.preprocessed(key);
+            if (hit !== undefined) source = hit;
+            else {
+              source = (
+                await compiler.preprocess(source, preprocess, { filename })
+              ).code;
+              disk?.cache.savePreprocessed(key, source);
+            }
           }
           if (component.test(args.path)) {
             source = rewriteBarrelImports(
@@ -358,16 +418,31 @@ export function svelte(options: SvelteBunOptions = {}): BunPlugin {
               barrelCache,
             );
           }
-          out = compileFile(compiler, source, {
-            filename: args.path,
+          const hmr = !production && inDevServer && devServerHmr(args);
+          const key = [
+            args.path,
+            source,
+            compiler.VERSION,
             side,
-            dev: !production,
-            // Only the dev server provides `import.meta.hot`.
-            hmr:
-              !production && fromDevServer !== undefined && devServerHmr(args),
-            ...(options.css ? { css: options.css } : {}),
-            ...(compilerOptions ? { compilerOptions } : {}),
-          });
+            !production,
+            hmr,
+            options.css,
+            compilerKey(compilerOptions),
+          ];
+          const hit = disk?.cache.compiled(key);
+          if (hit) out = hit;
+          else {
+            out = compileFile(compiler, source, {
+              filename: args.path,
+              side,
+              dev: !production,
+              // Only the dev server provides `import.meta.hot`.
+              hmr,
+              ...(options.css ? { css: options.css } : {}),
+              ...(compilerOptions ? { compilerOptions } : {}),
+            });
+            disk?.cache.saveCompiled(key, out);
+          }
         } catch (cause) {
           throw new SvelteBunError(
             "SB_COMPILE_FAILED",
@@ -380,7 +455,7 @@ export function svelte(options: SvelteBunOptions = {}): BunPlugin {
         // compat: Bun's dev server re-exports Svelte's `$document` and
         // `$window` by value, before `mount` assigns them, so the client
         // reads the globals instead.
-        if (side === "client" && fromDevServer !== undefined) {
+        if (side === "client" && inDevServer) {
           js = js.replace(LIVE_GLOBAL, "$1");
         }
         // A custom renderer has no DOM for CSS to style.
