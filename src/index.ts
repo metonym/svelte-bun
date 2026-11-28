@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { createRequire } from "node:module";
 import { basename, dirname, join, resolve } from "node:path";
 
 import type { BunPlugin, OnLoadArgs } from "bun";
@@ -14,6 +15,30 @@ import { productionByEnv, warn, workingDirectory } from "./env.ts";
 import { SvelteBunError } from "./errors.ts";
 import { inlineEsmEnv } from "./esm-env.ts";
 import { type ExportsCache, resolveCondition } from "./resolve.ts";
+
+/**
+ * The options a plugin compiles with, its own merged over
+ * `svelte.config.*`, as `plugin.api.options` gives them to other tools.
+ */
+export type ResolvedSvelteOptions = {
+  readonly root: string;
+  readonly extensions: readonly string[];
+  readonly preprocess: unknown;
+  readonly compilerOptions: Readonly<Record<string, unknown>> | undefined;
+  readonly css: "external" | "injected";
+  readonly conditions: readonly string[];
+  readonly cache: boolean | string;
+  readonly cacheKey:
+    ((path: string, source: string) => string | undefined) | undefined;
+};
+
+/**
+ * svelte-bun's plugin, whose `api.options` tells other tools, such as a
+ * type checker or an editor's config, what it compiles with.
+ */
+export type SveltePlugin = BunPlugin & {
+  readonly api: { readonly options: ResolvedSvelteOptions };
+};
 
 /** Options for `svelte()`; the bunfig entries read `svelte.config.js`. */
 export type SvelteBunOptions = {
@@ -148,7 +173,12 @@ function loadConfig(root: string): Config {
   if (!file) return {};
   let module: unknown;
   try {
-    module = import.meta.require(file);
+    // Node has no import.meta.require; its require loads an ES module
+    // config from 22.12.
+    module =
+      typeof import.meta.require === "function"
+        ? import.meta.require(file)
+        : createRequire(import.meta.url)(file);
   } catch (cause) {
     throw new SvelteBunError(
       "SB_CONFIG_UNREADABLE",
@@ -219,8 +249,8 @@ function withRenderer(
   };
 }
 
-// Bun's dev server passes `side` and `hmr` to onLoad; Bun.build doesn't.
-// The side Bun asks for: the dev server's, or Bun.build's by its target.
+// Bun names the side for a build's target as well as the dev server's,
+// so a server build compiles server output without being told.
 function devServerSide(args: OnLoadArgs): Side | undefined {
   if (!("side" in args)) return undefined;
   return args.side === "server" ? "server" : "client";
@@ -261,7 +291,7 @@ function printWarning(warning: string, path: string): void {
 }
 
 /** Svelte for `Bun.build`, Bun's dev server, and Bun's runtime. */
-export function svelte(options: SvelteBunOptions = {}): BunPlugin {
+export function svelte(options: SvelteBunOptions = {}): SveltePlugin {
   const root = options.root ?? workingDirectory();
   const production = options.production ?? productionByEnv();
   const onwarn = options.onwarn ?? printWarning;
@@ -342,8 +372,27 @@ export function svelte(options: SvelteBunOptions = {}): BunPlugin {
     }
   };
 
+  // As vite-plugin-svelte gives its options, read when asked, so creating
+  // the plugin loads no config.
+  const api = {
+    get options(): ResolvedSvelteOptions {
+      const config = configOf();
+      return Object.freeze({
+        root,
+        extensions: options.extensions ?? config.extensions ?? [".svelte"],
+        preprocess: options.preprocess ?? config.preprocess,
+        compilerOptions: options.compilerOptions ?? config.compilerOptions,
+        css: options.css ?? "external",
+        conditions: options.conditions ?? ["svelte"],
+        cache: options.cache ?? false,
+        cacheKey: options.cacheKey,
+      });
+    },
+  };
+
   return {
     name: "svelte-bun",
+    api,
     setup(build) {
       // The extensions decide the hooks' filters, so they're read here,
       // when the plugin is used, not on import.
@@ -498,7 +547,7 @@ export function svelte(options: SvelteBunOptions = {}): BunPlugin {
   };
 }
 
-const plugin: BunPlugin = svelte();
+const plugin: SveltePlugin = svelte();
 
 // eslint-disable-next-line import/no-default-export -- bunfig's [serve.static] plugins loads a module's default export, and passes no options
 export { plugin as default };

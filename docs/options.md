@@ -153,6 +153,73 @@ The dev server doesn't use the cache:
 it keeps compiled modules in memory, and its output has HMR.
 Delete the directory to start over; nothing is evicted.
 
+## One place for the options
+
+The plugin can be the config, as `sveltekit()` is in SvelteKit 3:
+a module exports the options and the plugin, and the dev server,
+the build and other tools all read that module.
+
+```ts
+// scripts/svelte.ts
+import { svelte, type SvelteBunOptions } from "svelte-bun";
+
+export const options = {
+  extensions: [".svelte", ".md"],
+  preprocess: [pages()],
+  cache: true,
+} satisfies SvelteBunOptions;
+
+// The dev server's, from bunfig.toml.
+export default svelte(options);
+```
+
+```toml
+# bunfig.toml
+[serve.static]
+plugins = ["./scripts/svelte.ts"]
+```
+
+```ts
+// scripts/build.ts
+import { svelte } from "svelte-bun";
+import { options } from "./svelte.ts";
+
+await Bun.build({
+  entrypoints: ["index.html"],
+  outdir: "dist",
+  plugins: [svelte({ ...options, production: true })],
+});
+```
+
+A build spreads `options` rather than reusing the plugin,
+since the dev server and the build differ in `production`.
+
+### `api.options`
+
+Each plugin gives the options it compiles with as `plugin.api.options`,
+the same field vite-plugin-svelte uses: its own over `svelte.config.*`,
+with the defaults filled in, read when first asked for and frozen.
+`onwarn`, `load`, `production` and `side` are left out:
+they belong to a build, not to the project.
+
+```ts
+import svelte from "./scripts/svelte.ts";
+
+svelte.api.options;
+// { root, extensions, preprocess, compilerOptions, css, conditions, cache, cacheKey }
+```
+
+svelte-bun imports on Node too, from 22.12,
+so a tool there can read the options; building needs Bun.
+An editor that reads only `svelte.config.*`
+can take them from the plugin, when the preprocessors run on Node:
+
+```js
+// svelte.config.js
+import svelte from "./scripts/svelte.ts";
+export default svelte.api.options;
+```
+
 ## At runtime
 
 `svelte-bun/register` compiles the `.svelte` files that `bun run`
@@ -200,7 +267,8 @@ with a `code` from `SvelteBunErrorCode` and a `kind`:
 ## Not supported
 
 - Svelte 4 and earlier: svelte-bun compiles with Svelte 5's API.
-- Node: the plugin uses Bun's plugin API and transpiler.
+- Building on Node: the plugin uses Bun's plugin API and transpiler.
+  Node can import it and read `api.options`.
 - A build pipeline: prerendering, hydration,
   and inlining CSS are the app's, or an SSG's.
 

@@ -55,7 +55,6 @@ export type CompiledFile = {
 };
 
 const RUNE_MODULE = /\.svelte\.[jt]s$/;
-const typescript = new Bun.Transpiler({ loader: "ts" });
 
 function isRuneModule(path: string): boolean {
   return RUNE_MODULE.test(path);
@@ -70,9 +69,11 @@ export function compileFile(
   const { filename, side, dev = false, hmr = false } = options;
   const shared = { ...options.compilerOptions, filename, generate: side, dev };
   if (isRuneModule(filename)) {
-    // compileModule reads JavaScript only.
+    // compileModule reads JavaScript only. The transpiler is made here,
+    // not on import, so the module imports where Bun isn't: a tool on Node
+    // reads a plugin's options without compiling.
     const js = filename.endsWith(".ts")
-      ? typescript.transformSync(source)
+      ? new Bun.Transpiler({ loader: "ts" }).transformSync(source)
       : source;
     const result = compiler.compileModule(js, shared);
     return {
